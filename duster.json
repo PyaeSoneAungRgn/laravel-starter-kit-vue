@@ -1,0 +1,22 @@
+{
+    "scripts": {
+        "lint": {
+            "rector": [
+                "./vendor/bin/rector",
+                "--dry-run"
+            ],
+            "phpstan": [
+                "./vendor/bin/phpstan",
+                "analyse",
+                "--memory-limit",
+                "1G"
+            ]
+        },
+        "fix": {
+            "rector": [
+                "./vendor/bin/rector"
+            ]
+        }
+    },
+    "processTimeout": 180
+}
