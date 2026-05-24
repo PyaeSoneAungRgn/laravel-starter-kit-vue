@@ -52,6 +52,27 @@ Run duster lint for PHPStan, duster fix for refactor with Rector, and format wit
 
 #### Default Laravel Rector Rules
 
+The following Rector rules are applied via `LaravelSetList::LARAVEL_CODE_QUALITY`, `LARAVEL_COLLECTION`, and `LARAVEL_TYPE_DECLARATIONS` sets, targeting `app/`, `config/`, `routes/`, and all module source directories.
+
+```php
+// rector.php
+return RectorConfig::configure()
+    ->withPaths([
+        __DIR__.'/app',
+        __DIR__.'/config',
+        __DIR__.'/routes',
+        __DIR__.'/app-modules/*/src',
+    ])
+    ->withSetProviders(LaravelSetProvider::class)
+    ->withComposerBased(laravel: true)
+    ->withSets([
+        LaravelSetList::LARAVEL_CODE_QUALITY,
+        LaravelSetList::LARAVEL_COLLECTION,
+        LaravelSetList::LARAVEL_TYPE_DECLARATIONS,
+    ])
+    ->withPhpSets();
+```
+
 ##### EloquentMagicMethodToQueryBuilderRector
 
 ```diff
@@ -127,6 +148,20 @@ Run duster lint for PHPStan, duster fix for refactor with Rector, and format wit
 +$query->whereLike('name', 'Rector');
 +$query->orWhereLike('name', 'Rector');
 +$query->whereLike('name', 'Rector', true);
+```
+
+---
+
+### 🧩 Modular
+
+This starter kit uses `internachi/modular` for domain modules under `app-modules/`.
+
+```bash
+php artisan make:module {name}
+php artisan make:model {Name} --module={module}
+php artisan modules:list
+php artisan modules:sync
+php artisan test app-modules/{module-name}/tests
 ```
 
 ---

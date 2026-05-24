@@ -3,12 +3,8 @@
 declare(strict_types=1);
 
 use Rector\Config\RectorConfig;
-use RectorLaravel\Rector\Class_\ModelCastsPropertyToCastsMethodRector;
-use RectorLaravel\Rector\ClassMethod\ScopeNamedClassMethodToScopeAttributedClassMethodRector;
-use RectorLaravel\Rector\MethodCall\EloquentWhereRelationTypeHintingParameterRector;
-use RectorLaravel\Rector\MethodCall\EloquentWhereTypeHintClosureParameterRector;
-use RectorLaravel\Rector\MethodCall\WhereToWhereLikeRector;
-use RectorLaravel\Rector\StaticCall\EloquentMagicMethodToQueryBuilderRector;
+use RectorLaravel\Set\LaravelSetList;
+use RectorLaravel\Set\LaravelSetProvider;
 
 return RectorConfig::configure()
     ->withPaths([
@@ -17,12 +13,11 @@ return RectorConfig::configure()
         __DIR__ . '/routes',
         __DIR__ . '/app-modules/*/src',
     ])
-    ->withRules([
-        EloquentMagicMethodToQueryBuilderRector::class,
-        EloquentWhereRelationTypeHintingParameterRector::class,
-        EloquentWhereTypeHintClosureParameterRector::class,
-        ModelCastsPropertyToCastsMethodRector::class,
-        ScopeNamedClassMethodToScopeAttributedClassMethodRector::class,
-        WhereToWhereLikeRector::class,
+    ->withSetProviders(LaravelSetProvider::class)
+    ->withComposerBased(laravel: true)
+    ->withSets([
+        LaravelSetList::LARAVEL_CODE_QUALITY,
+        LaravelSetList::LARAVEL_COLLECTION,
+        LaravelSetList::LARAVEL_TYPE_DECLARATIONS,
     ])
     ->withPhpSets();
