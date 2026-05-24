@@ -15,6 +15,7 @@ return RectorConfig::configure()
         __DIR__ . '/app',
         __DIR__ . '/config',
         __DIR__ . '/routes',
+        __DIR__ . '/app-modules/*/src',
     ])
     ->withRules([
         EloquentMagicMethodToQueryBuilderRector::class,
