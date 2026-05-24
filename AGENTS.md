@@ -190,6 +190,13 @@ This project has domain-specific skills available in `**/skills/**`. You MUST ac
 Vue components must have a single root element.
 - IMPORTANT: Activate `inertia-vue-development` when working with Inertia Vue client-side patterns.
 
+=== internachi/modular rules ===
+
+## Modular
+
+- This a modular application. Each module is located in its own directory inside of `app-modules`.
+- IMPORTANT: Activate `modular` every time you're working with or creating a new module.
+
 === tightenco/duster rules ===
 
 ## Duster Code Formatter

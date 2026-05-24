@@ -7,13 +7,15 @@
     "mcp": true,
     "nightwatch": false,
     "packages": [
-        "tightenco/duster"
+        "tightenco/duster",
+        "internachi/modular"
     ],
     "sail": false,
     "skills": [
         "laravel-best-practices",
         "pest-testing",
         "inertia-vue-development",
-        "tailwindcss-development"
+        "tailwindcss-development",
+        "modular"
     ]
 }
