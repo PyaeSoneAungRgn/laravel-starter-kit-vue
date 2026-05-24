@@ -2,7 +2,6 @@ import '../css/app.css';
 
 import { createInertiaApp } from '@inertiajs/vue3';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
-import type { DefineComponent } from 'vue';
 import { createApp, h } from 'vue';
 import { ZiggyVue } from 'ziggy-js';
 import { initializeTheme } from './composables/useAppearance';
@@ -11,6 +10,7 @@ import { initializeTheme } from './composables/useAppearance';
 declare module 'vite/client' {
     interface ImportMetaEnv {
         readonly VITE_APP_NAME: string;
+
         [key: string]: string | boolean | undefined;
     }
 
@@ -24,7 +24,18 @@ const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
 
 createInertiaApp({
     title: (title) => `${title} - ${appName}`,
-    resolve: (name) => resolvePageComponent(`./pages/${name}.vue`, import.meta.glob<DefineComponent>('./pages/**/*.vue')),
+    resolve: (name) => {
+        const pages = import.meta.glob(['./pages/**/*.vue', '../../app-modules/*/resources/js/pages/**/*.vue']);
+        const regex = /([^:]+)::(.+)/;
+        const matches = regex.exec(name);
+        if (matches && matches.length > 2) {
+            const module = matches[1].replace(/[A-Z]/g, (m, offset) => (offset > 0 ? '-' : '') + m.toLowerCase());
+
+            const pageName = matches[2];
+            return resolvePageComponent(`../../app-modules/${module}/resources/js/pages/${pageName}.vue`, pages);
+        }
+        return resolvePageComponent(`./pages/${name}.vue`, pages);
+    },
     setup({ el, App, props, plugin }) {
         createApp({ render: () => h(App, props) })
             .use(plugin)

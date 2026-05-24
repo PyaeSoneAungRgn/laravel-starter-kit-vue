@@ -12,7 +12,18 @@ createServer((page) =>
         page,
         render: renderToString,
         title: (title) => `${title} - ${appName}`,
-        resolve: (name) => resolvePageComponent(`./pages/${name}.vue`, import.meta.glob('./pages/**/*.vue')),
+        resolve: (name) => {
+            const pages = import.meta.glob(['./pages/**/*.vue', '../../app-modules/*/resources/js/pages/**/*.vue']);
+            const regex = /([^:]+)::(.+)/;
+            const matches = regex.exec(name);
+            if (matches && matches.length > 2) {
+                const module = matches[1].replace(/[A-Z]/g, (m, offset) => (offset > 0 ? '-' : '') + m.toLowerCase());
+
+                const pageName = matches[2];
+                return resolvePageComponent(`../../app-modules/${module}/resources/js/pages/${pageName}.vue`, pages);
+            }
+            return resolvePageComponent(`./pages/${name}.vue`, pages);
+        },
         setup({ App, props, plugin }) {
             const app = createSSRApp({ render: () => h(App, props) });
 
