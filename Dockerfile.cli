@@ -1,0 +1,16 @@
+FROM serversideup/php:8.5-cli-alpine
+
+# Copy root composer files
+COPY --chown=www-data:www-data composer.json composer.lock ./
+
+# Copy the entire app-modules directory so Composer can find all local paths
+COPY --chown=www-data:www-data app-modules/ ./app-modules/
+
+# Install dependencies (Composer will successfully link your modules now)
+RUN composer install --no-dev --no-autoloader --no-scripts
+
+# Copy the rest of the application source code
+COPY --chown=www-data:www-data . .
+
+# Finalize autoloader and run framework post-install tasks
+RUN composer dump-autoload --no-dev --classmap-authoritative

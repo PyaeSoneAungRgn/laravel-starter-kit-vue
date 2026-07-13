@@ -1,0 +1,109 @@
+x-common-env: &common-env
+  PHP_OPCACHE_ENABLE: '1'
+  AUTORUN_ENABLED: 'true'
+  AUTORUN_LARAVEL_MIGRATION: 'false'
+  PHP_OPCACHE_MEMORY_CONSUMPTION: '256'
+  PHP_OPCACHE_VALIDATE_TIMESTAMPS: '0'
+  PHP_OPCACHE_INTERNED_STRINGS_BUFFER: '16'
+  PHP_OPCACHE_MAX_ACCELERATED_FILES: '20000'
+  NIGHTWATCH_TOKEN: '${NIGHTWATCH_TOKEN}'
+  NIGHTWATCH_INGEST_URI: 'nightwatch-agent:2407'
+
+services:
+  api:
+    build: .
+    container_name: 'api'
+    networks:
+      - laravel
+    ports:
+      - '80:8080'
+    environment:
+      <<: *common-env
+      SSL_MODE: 'off'
+    command: ['php', 'artisan', 'octane:start', '--server=frankenphp', '--port=8080']
+    healthcheck:
+      test: ['CMD', 'healthcheck-octane']
+      start_period: 10s
+
+  backend:
+    build: .
+    container_name: 'backend'
+    networks:
+        - laravel
+    ports:
+      - '8080:8080'
+    environment:
+      <<: *common-env
+      SSL_MODE: 'off'
+    command: ['php', 'artisan', 'octane:start', '--server=frankenphp', '--port=8080']
+    healthcheck:
+      test: ['CMD', 'healthcheck-octane']
+      start_period: 10s
+
+  reverb:
+      build:
+        context: .
+        dockerfile: Dockerfile.cli
+      container_name: 'reverb'
+      ports:
+        - '8000:8000'
+      networks:
+        - laravel
+      environment:
+        <<: *common-env
+      command: ["php", "/var/www/html/artisan", "reverb:start", "--port=8000"]
+      stop_signal: SIGTERM
+      healthcheck:
+        test: ["CMD", "healthcheck-reverb"]
+        start_period: 10s
+
+  horizon:
+    build:
+      context: .
+      dockerfile: Dockerfile.cli
+    container_name: 'horizon'
+    networks:
+      - laravel
+    environment:
+      <<: *common-env
+      PHP_MEMORY_LIMIT: '512M'
+    command: ['php', '/var/www/html/artisan', 'horizon']
+    stop_signal: SIGTERM
+    healthcheck:
+      test: ['CMD', 'healthcheck-horizon']
+      start_period: 10s
+
+  task:
+    build:
+      context: .
+      dockerfile: Dockerfile.cli
+    container_name: 'task'
+    networks:
+      - laravel
+    environment:
+      <<: *common-env
+      PHP_MEMORY_LIMIT: '512M'
+    command: ['php', '/var/www/html/artisan', 'schedule:work']
+    stop_signal: SIGTERM
+    healthcheck:
+      test: ['CMD', 'healthcheck-schedule']
+      start_period: 10s
+
+  nightwatch-agent:
+    image: laravelphp/nightwatch-agent:latest
+    container_name: 'nightwatch-agent'
+    networks:
+      - laravel
+    environment:
+      NIGHTWATCH_TOKEN: '${NIGHTWATCH_TOKEN}'
+    healthcheck:
+      test: php nightwatch-status
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped
+
+networks:
+  laravel:
+    driver: bridge

@@ -1,0 +1,50 @@
+name: Deploy to DigitalOcean
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to deploy'
+        required: true
+        default: 'release/staging'
+      environment:
+        description: 'Environment'
+        type: choice
+        required: true
+        default: 'staging'
+        options:
+          - production
+          - staging
+      service:
+        description: 'Service'
+        type: choice
+        required: true
+        default: 'api'
+        options:
+          - api
+          - backend
+          - task
+          - horizon
+          - reverb
+          - nightwatch-agent
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - name: Deploy to selected server
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DO_HOST }}
+          username: ${{ secrets.DO_USERNAME }}
+          key: ${{ secrets.DO_SSH_KEY }}
+          port: ${{ secrets.DO_PORT || 22 }}
+          script: |
+            cd "${{ secrets.APP_PATH || '~/app' }}"
+            git pull origin ${{ inputs.branch }}
+            docker compose up -d ${{ inputs.service }} --build
