@@ -5,6 +5,11 @@ import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import { createApp, h } from 'vue';
 import { ZiggyVue } from 'ziggy-js';
 import { initializeTheme } from './composables/useAppearance';
+import { configureEcho } from '@laravel/echo-vue';
+
+configureEcho({
+    broadcaster: 'reverb',
+});
 
 // Extend ImportMeta interface for Vite...
 declare module 'vite/client' {
