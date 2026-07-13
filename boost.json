@@ -13,9 +13,13 @@
     "sail": false,
     "skills": [
         "laravel-best-practices",
+        "configure-nightwatch",
+        "octane-development",
         "pest-testing",
         "inertia-vue-development",
         "tailwindcss-development",
+        "echo-vue-development",
+        "echo-development",
         "modular"
     ]
 }
