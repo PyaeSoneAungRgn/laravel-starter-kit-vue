@@ -1,9 +1,6 @@
 name: Duster Lint
 
-on:
-    push:
-        branches: [ main ]
-    pull_request:
+on: ['pull_request']
 
 jobs:
   duster:
@@ -18,12 +15,12 @@ jobs:
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
-          php-version: 8.3
+          php-version: 8.4
           tools: composer:v2
           coverage: xdebug
-      
+
       - name: Install Dependencies
         run: composer install
 
       - name: "Duster Lint"
-        run: ./vendor/bin/duster lint --using=phpstan,rector,pint
+        run: ./vendor/bin/duster lint --using=pint

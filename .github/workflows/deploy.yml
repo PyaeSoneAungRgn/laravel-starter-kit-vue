@@ -7,6 +7,10 @@ on:
         description: 'Branch to deploy'
         required: true
         default: 'release/staging'
+        type: choice
+        options:
+          - release/production
+          - release/staging
       environment:
         description: 'Environment'
         type: choice
@@ -14,6 +18,7 @@ on:
         default: 'staging'
         options:
           - production
+          - production-background
           - staging
       service:
         description: 'Service'
@@ -29,7 +34,7 @@ on:
           - nightwatch-agent
 
 concurrency:
-  group: production-deploy
+  group: deploy-${{ inputs.environment }}-${{ inputs.service }}
   cancel-in-progress: false
 
 jobs:
@@ -45,6 +50,6 @@ jobs:
           key: ${{ secrets.DO_SSH_KEY }}
           port: ${{ secrets.DO_PORT || 22 }}
           script: |
-            cd "${{ secrets.APP_PATH || '~/app' }}"
+            cd "${{ secrets.APP_PATH }}"
             git pull origin ${{ inputs.branch }}
             docker compose up -d ${{ inputs.service }} --build
