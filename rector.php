@@ -11,7 +11,10 @@ return RectorConfig::configure()
         __DIR__ . '/app',
         __DIR__ . '/config',
         __DIR__ . '/routes',
+        __DIR__ . '/tests',
         __DIR__ . '/app-modules/*/src',
+        __DIR__ . '/app-modules/*/routes',
+        __DIR__ . '/app-modules/*/tests',
     ])
     ->withSetProviders(LaravelSetProvider::class)
     ->withComposerBased(laravel: true)
