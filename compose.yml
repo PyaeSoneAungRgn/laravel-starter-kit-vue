@@ -6,6 +6,10 @@ x-common-env: &common-env
   PHP_OPCACHE_VALIDATE_TIMESTAMPS: '0'
   PHP_OPCACHE_INTERNED_STRINGS_BUFFER: '16'
   PHP_OPCACHE_MAX_ACCELERATED_FILES: '20000'
+  PHP_MEMORY_LIMIT: '128M'
+  PHP_MAX_EXECUTION_TIME: '30'
+  PHP_POST_MAX_SIZE: '8M'
+  PHP_UPLOAD_MAX_FILE_SIZE: '2M'
   NIGHTWATCH_TOKEN: '${NIGHTWATCH_TOKEN}'
   NIGHTWATCH_INGEST_URI: 'nightwatch-agent:2407'
 
@@ -21,6 +25,8 @@ services:
       <<: *common-env
       SSL_MODE: 'off'
     command: ['php', 'artisan', 'octane:start', '--server=frankenphp', '--port=8080']
+    volumes:
+      - ./storage/logs:/var/www/html/storage/logs
     healthcheck:
       test: ['CMD', 'healthcheck-octane']
       start_period: 10s
@@ -36,6 +42,8 @@ services:
       <<: *common-env
       SSL_MODE: 'off'
     command: ['php', 'artisan', 'octane:start', '--server=frankenphp', '--port=8080']
+    volumes:
+      - ./storage/logs:/var/www/html/storage/logs
     healthcheck:
       test: ['CMD', 'healthcheck-octane']
       start_period: 10s
@@ -52,6 +60,8 @@ services:
       environment:
         <<: *common-env
       command: ["php", "/var/www/html/artisan", "reverb:start", "--port=8000"]
+      volumes:
+        - ./storage/logs:/var/www/html/storage/logs
       stop_signal: SIGTERM
       healthcheck:
         test: ["CMD", "healthcheck-reverb"]
@@ -68,6 +78,8 @@ services:
       <<: *common-env
       PHP_MEMORY_LIMIT: '512M'
     command: ['php', '/var/www/html/artisan', 'horizon']
+    volumes:
+      - ./storage/logs:/var/www/html/storage/logs
     stop_signal: SIGTERM
     healthcheck:
       test: ['CMD', 'healthcheck-horizon']
@@ -84,6 +96,8 @@ services:
       <<: *common-env
       PHP_MEMORY_LIMIT: '512M'
     command: ['php', '/var/www/html/artisan', 'schedule:work']
+    volumes:
+      - ./storage/logs:/var/www/html/storage/logs
     stop_signal: SIGTERM
     healthcheck:
       test: ['CMD', 'healthcheck-schedule']
