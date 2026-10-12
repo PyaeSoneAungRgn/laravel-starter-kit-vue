@@ -301,6 +301,25 @@ The container runs PHP with FrankenPHP (via `serversideup/php`) and serves the a
 docker compose up -d api
 ```
 
+Application source is bind-mounted from the host (`app/`, `app-modules/`, `bootstrap/app.php`, `bootstrap/providers.php`, `config/`, `database/`, `public/index.php`, `resources/`, `routes/`), so pulling new code does not require an image build. Everything the image owns — `vendor/`, `node_modules/`, `public/build/`, `storage/`, `bootstrap/cache/` and `.env` — stays inside the image. Opcache revalidates mtimes (`PHP_OPCACHE_VALIDATE_TIMESTAMPS=1`) so edits are picked up, and the autoloader is optimized but not authoritative (`composer dump-autoload -o`) so newly added classes resolve without a rebuild.
+
+Only paths the application **reads** are mounted. `storage/` is deliberately left to the image: Octane writes `storage/logs/octane-server-state.json` and the app writes logs, sessions and caches under `storage/`, so binding a host-owned directory over it fails with `Permission denied` — the host's uid does not match the container's `www-data`. Log to stderr (`LOG_CHANNEL=stderr`) to read them with `docker compose logs -f api` instead of from a host file.
+
+After a `git pull`, refresh a running app container without building:
+
+```bash
+docker compose exec -T api php artisan optimize
+docker compose exec -T api php artisan octane:reload --server=frankenphp
+```
+
+`OCTANE_SERVER=frankenphp` is set in `compose.yml`, so `octane:reload`, `octane:status` and `octane:stop` target the running server without an explicit `--server` flag.
+
+A rebuild is still required when a change touches something the image owns: `composer.json`/`composer.lock`, `package.json`/`package-lock.json`, an `app-modules/*/composer.json`, `Dockerfile`/`Dockerfile.cli`, `compose.yml`, `.dockerignore`, anything under `public/`, or frontend assets (`resources/js`, `resources/css`, and their `app-modules/*/resources/...` equivalents).
+
+Because `.env` is baked into the image and is untracked, editing it on a server never shows up in the deploy diff — after changing `.env` values such as `DB_DATABASE` or credentials, deploy with `mode: full` so the image is rebuilt with them. Environment-specific values that should *not* require a rebuild belong in an `environment:` override in `compose.yml` instead.
+
+`public/frankenphp-worker.php` stays gitignored: it is excluded from the build context and generated inside the image from `vendor/laravel/octane`'s own stub, so no PHP is required on the host and the worker can never drift from the Octane version running it. The same applies to `frankenphp` and `**/caddy`. Do not remove the generation step from `Dockerfile` or the `.dockerignore` entry without adding the file to git, or the Octane services will fail to boot.
+
 The `compose.yml` file provides the following services:
 
 | Service | Purpose |
@@ -312,6 +331,8 @@ The `compose.yml` file provides the following services:
 | `task` | Scheduled task runner (`schedule:work`) |
 | `nightwatch-agent` | Collects Nightwatch monitoring data |
 
+The published ports are variable-driven with production-preserving defaults (`${API_PUBLISHED_PORT:-80}`, `${BACKEND_PUBLISHED_PORT:-8080}`), so production is unchanged while other environments can override them from `.env` — for example `API_PUBLISHED_PORT=127.0.0.1:8080` when a host nginx already owns port 80 and proxies to the container.
+
 ---
 
 ### 😺 GitHub Actions
@@ -322,7 +343,7 @@ Automated workflows for continuous integration and deployment:
 - **Duster Lint** — runs `duster lint` (PHPStan) on every pull request.
 - **Duster Fix** — runs `duster fix` (Pint) and auto-commits the fixes on every pull request.
 - **OpenCode** — triggers OpenCode on `/oc` or `/opencode` comments in issues and pull requests.
-- **Deploy to DigitalOcean** — manually triggered deployment of the selected branch and service to a DigitalOcean droplet via SSH and `docker compose up`.
+- **Deploy to DigitalOcean** — manually triggered deployment of the selected branch and service to a DigitalOcean droplet via SSH and `docker compose up`. The `mode` input selects `fast` (default: `git pull` plus a cache refresh and worker reload, no image build) or `full` (forced `docker compose up --build`). `fast` escalates to a rebuild automatically when the pushed commits changed a dependency manifest, a Docker/compose file, the `public` directory, or frontend assets.
 
 ---
 

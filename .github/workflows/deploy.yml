@@ -32,6 +32,14 @@ on:
           - horizon
           - reverb
           - nightwatch-agent
+      mode:
+        description: 'Deploy mode (fast skips the image build unless a rebuild is required)'
+        type: choice
+        required: true
+        default: 'fast'
+        options:
+          - fast
+          - full
 
 concurrency:
   group: deploy-${{ inputs.environment }}-${{ inputs.service }}
@@ -50,6 +58,41 @@ jobs:
           key: ${{ secrets.DO_SSH_KEY }}
           port: ${{ secrets.DO_PORT || 22 }}
           script: |
+            set -eu
             cd "${{ secrets.APP_PATH }}"
-            git pull origin ${{ inputs.branch }}
-            docker compose up -d ${{ inputs.service }} --build
+            BEFORE=$(git rev-parse HEAD)
+            git pull origin "${{ inputs.branch }}"
+            CHANGED=$(git diff --name-only "$BEFORE" HEAD)
+
+            # Application source is bind-mounted on the host, so most commits
+            # only need a cache refresh and a worker reload. Rebuild only when
+            # something the image itself owns changed: dependency manifests,
+            # Docker/compose definitions, the public directory, or frontend
+            # assets (npm run build output is baked into the image).
+            NEEDS_BUILD=0
+            if [ "${{ inputs.mode }}" = "full" ]; then
+              NEEDS_BUILD=1
+            fi
+            if printf '%s\n' "$CHANGED" | grep -qE \
+              '^composer\.(json|lock)$|^package(-lock)?\.json$|^vite\.config\.ts$|^tsconfig\.json$|^components\.json$|^Dockerfile(\.cli)?$|^compose\.[^/]+$|^\.dockerignore$|^public/|^app-modules/[^/]+/composer\.json$|(^|/)resources/(js|css)/'; then
+              NEEDS_BUILD=1
+            fi
+
+            if [ "$NEEDS_BUILD" = "1" ]; then
+              docker compose up -d "${{ inputs.service }}" --build
+            else
+              docker compose up -d "${{ inputs.service }}"
+            fi
+
+            case "${{ inputs.service }}" in
+              api|backend)
+                docker compose exec -T "${{ inputs.service }}" php artisan optimize
+                docker compose exec -T "${{ inputs.service }}" php artisan octane:reload --server=frankenphp
+                ;;
+              horizon)
+                docker compose exec -T horizon php artisan horizon:terminate
+                ;;
+              reverb|task)
+                docker compose restart "${{ inputs.service }}"
+                ;;
+            esac
