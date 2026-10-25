@@ -2,13 +2,25 @@
 
 FROM serversideup/php:8.5-cli-alpine
 
-# Dependencies are installed as root so the BuildKit cache mount below can use
-# its default (root-owned) permissions. The uid of www-data is configurable via
-# PUID/PGID in these base images, so hardcoding a uid on the mount would be
-# fragile; instead the install chowns its result back to www-data in the same
-# layer. COMPOSER_ALLOW_SUPERUSER already defaults to 1 in this image.
 USER root
 WORKDIR /var/www/html
+
+# www-data is 82:82 on Alpine, but this image shares storage/logs with the
+# FrankenPHP image built by Dockerfile, which runs as 33:33. Both must settle on
+# the same IDs, and on the IDs of the user that owns this checkout on the host,
+# or the containers cannot write the bind-mounted log file. Build with:
+#
+#   PUID=$(id -u) PGID=$(id -g) docker compose build
+#
+ARG PUID=33
+ARG PGID=33
+RUN docker-php-serversideup-set-id www-data ${PUID}:${PGID} \
+    && docker-php-serversideup-set-file-permissions --owner ${PUID}:${PGID} --service cli
+
+# Dependencies are installed as root so the BuildKit cache mount below can use
+# its default (root-owned) permissions; the install chowns its result back to
+# www-data in the same layer. COMPOSER_ALLOW_SUPERUSER already defaults to 1 in
+# this image.
 
 # Copy root composer files
 COPY composer.json composer.lock ./

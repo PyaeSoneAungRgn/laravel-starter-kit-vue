@@ -60,6 +60,14 @@ jobs:
           script: |
             set -eu
             cd "${{ secrets.APP_PATH }}"
+
+            # www-data's UID/GID is baked into the images at build time and has
+            # to match the owner of this checkout, because storage/logs is
+            # bind-mounted from the host. Exporting the deploy user's IDs keeps
+            # the log file writable by the containers after a rebuild.
+            export PUID=$(id -u)
+            export PGID=$(id -g)
+
             BEFORE=$(git rev-parse HEAD)
             git pull origin "${{ inputs.branch }}"
             CHANGED=$(git diff --name-only "$BEFORE" HEAD)

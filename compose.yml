@@ -19,17 +19,33 @@ x-common-env: &common-env
   NIGHTWATCH_TOKEN: '${NIGHTWATCH_TOKEN}'
   NIGHTWATCH_INGEST_URI: 'nightwatch-agent:2407'
 
+# Both images bake www-data's UID/GID in at build time (the base images are
+# unprivileged and cannot change it at runtime). They must match the user that
+# owns this checkout, because storage/logs is bind-mounted from the host and a
+# mount keeps the host directory's owner. Export them before building:
+#
+#   PUID=$(id -u) PGID=$(id -g) docker compose build
+#
+# The deploy workflow does this automatically. Changing them requires a rebuild,
+# not just a restart, since the IDs live in the image.
+x-build: &build
+  context: .
+  args:
+    PUID: '${PUID:-33}'
+    PGID: '${PGID:-33}'
+
 # Application source, bind-mounted so `git pull` on the host updates running
 # containers without an image build. Deliberately not a `./:/var/www/html`
-# mount: vendor/, node_modules/, public/build/, storage/, bootstrap/cache/ and
-# .env stay from the image, so assets built by `npm run build` still ship.
+# mount: vendor/, node_modules/, public/build/, bootstrap/cache/ and .env stay
+# from the image, so assets built by `npm run build` still ship.
 #
-# Only paths the application READS are mounted here. storage/ is intentionally
-# NOT mounted: Octane writes its process id file to storage/logs while the app
-# writes logs, sessions and caches under storage/. Binding a host-owned
-# directory over it makes those writes fail with "Permission denied", because
-# the host's uid does not match the container's www-data. Leaving it to the
-# image keeps the www-data ownership that COPY --chown established.
+# storage/ is left to the image too — sessions and caches need the www-data
+# ownership COPY --chown established — with one exception: storage/logs is
+# mounted so the Laravel log file is readable on the host. That mount hides the
+# image's ownership, which is why www-data has to be built with the checkout
+# owner's UID/GID (see x-build). Octane's state file is kept in
+# storage/framework for the same reason: api and backend are separate servers
+# and would otherwise overwrite each other's state file through the mount.
 x-app-mounts: &app-mounts
   - ./app:/var/www/html/app
   - ./app-modules:/var/www/html/app-modules
@@ -40,10 +56,11 @@ x-app-mounts: &app-mounts
   - ./public/index.php:/var/www/html/public/index.php
   - ./resources:/var/www/html/resources
   - ./routes:/var/www/html/routes
+  - ./storage/logs:/var/www/html/storage/logs
 
 services:
   api:
-    build: .
+    build: *build
     container_name: 'api'
     networks:
       - laravel
@@ -62,7 +79,7 @@ services:
       start_period: 10s
 
   backend:
-    build: .
+    build: *build
     container_name: 'backend'
     networks:
         - laravel
@@ -79,7 +96,7 @@ services:
 
   reverb:
       build:
-        context: .
+        <<: *build
         dockerfile: Dockerfile.cli
       container_name: 'reverb'
       ports:
@@ -97,7 +114,7 @@ services:
 
   horizon:
     build:
-      context: .
+      <<: *build
       dockerfile: Dockerfile.cli
     container_name: 'horizon'
     networks:
@@ -114,7 +131,7 @@ services:
 
   task:
     build:
-      context: .
+      <<: *build
       dockerfile: Dockerfile.cli
     container_name: 'task'
     networks:

@@ -301,9 +301,15 @@ The container runs PHP with FrankenPHP (via `serversideup/php`) and serves the a
 docker compose up -d api
 ```
 
-Application source is bind-mounted from the host (`app/`, `app-modules/`, `bootstrap/app.php`, `bootstrap/providers.php`, `config/`, `database/`, `public/index.php`, `resources/`, `routes/`), so pulling new code does not require an image build. Everything the image owns — `vendor/`, `node_modules/`, `public/build/`, `storage/`, `bootstrap/cache/` and `.env` — stays inside the image. Opcache revalidates mtimes (`PHP_OPCACHE_VALIDATE_TIMESTAMPS=1`) so edits are picked up, and the autoloader is optimized but not authoritative (`composer dump-autoload -o`) so newly added classes resolve without a rebuild.
+Application source is bind-mounted from the host (`app/`, `app-modules/`, `bootstrap/app.php`, `bootstrap/providers.php`, `config/`, `database/`, `public/index.php`, `resources/`, `routes/`), so pulling new code does not require an image build. Everything the image owns — `vendor/`, `node_modules/`, `public/build/`, `storage/` (except `storage/logs/`), `bootstrap/cache/` and `.env` — stays inside the image. Opcache revalidates mtimes (`PHP_OPCACHE_VALIDATE_TIMESTAMPS=1`) so edits are picked up, and the autoloader is optimized but not authoritative (`composer dump-autoload -o`) so newly added classes resolve without a rebuild.
 
-Only paths the application **reads** are mounted. `storage/` is deliberately left to the image: Octane writes `storage/logs/octane-server-state.json` and the app writes logs, sessions and caches under `storage/`, so binding a host-owned directory over it fails with `Permission denied` — the host's uid does not match the container's `www-data`. Log to stderr (`LOG_CHANNEL=stderr`) to read them with `docker compose logs -f api` instead of from a host file.
+`storage/logs/` is the one writable path mounted from the host, so `storage/logs/laravel.log` is the log file the containers write and you can `tail -f` it (or run `php artisan pail`) outside Docker. The mount keeps the host directory's owner, and these base images run unprivileged, so `www-data`'s UID/GID is baked in at build time and must match the checkout owner:
+
+```bash
+PUID=$(id -u) PGID=$(id -g) docker compose build
+```
+
+`compose.yml` forwards `PUID`/`PGID` to both `Dockerfile` and `Dockerfile.cli` so the web server and the workers share the same IDs and can append to the same file; both default to `33:33`. Changing them needs a rebuild, not a restart. Octane's `storage/logs/octane-server-state.json` was moved to `storage/framework/` because `api` and `backend` would otherwise clobber each other's state file through the shared mount. Sessions, caches and `storage/framework/` stay in the image; log to stderr instead (`LOG_CHANNEL=stderr`) if you prefer `docker compose logs -f api`.
 
 After a `git pull`, refresh a running app container without building:
 

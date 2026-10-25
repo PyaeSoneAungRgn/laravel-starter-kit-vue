@@ -221,4 +221,19 @@ return [
 
     'max_execution_time' => 30,
 
+    /*
+    |--------------------------------------------------------------------------
+    | Server State File
+    |--------------------------------------------------------------------------
+    |
+    | Octane writes the PID and port of the running server to this file so
+    | commands like "octane:reload" and "octane:stop" can find it. It lives in
+    | storage/framework instead of Octane's default of storage/logs because
+    | that directory is bind-mounted from the host (see compose.yml), where the
+    | api and backend services would otherwise overwrite each other's state.
+    |
+    */
+
+    'state_file' => env('OCTANE_STATE_FILE', storage_path('framework/octane-server-state.json')),
+
 ];

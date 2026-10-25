@@ -11,11 +11,25 @@ RUN apt-get update && apt-get install -y curl \
 
 WORKDIR /var/www/html
 
+# The app runs as www-data, and these images are unprivileged, so the UID/GID
+# has to be baked in at build time. Build with the IDs of the user that owns
+# this checkout on the host:
+#
+#   PUID=$(id -u) PGID=$(id -g) docker compose build
+#
+# storage/logs is bind-mounted from the host (see compose.yml), and a mount
+# keeps the host directory's owner, so a mismatched UID means Laravel cannot
+# write laravel.log. Dockerfile.cli takes the same arguments: the workers must
+# resolve to the same IDs or they cannot append to the log the web server owns.
+ARG PUID=33
+ARG PGID=33
+RUN docker-php-serversideup-set-id www-data ${PUID}:${PGID} \
+    && docker-php-serversideup-set-file-permissions --owner ${PUID}:${PGID} --service frankenphp
+
 # Dependencies are installed as root so the BuildKit cache mounts below can use
-# their default (root-owned) permissions. The uid of www-data is configurable
-# via PUID/PGID in these base images, so hardcoding a uid on the mount would be
-# fragile; instead each step chowns its result back to www-data in the same
-# layer. COMPOSER_ALLOW_SUPERUSER already defaults to 1 in this image.
+# their default (root-owned) permissions; each step chowns its result back to
+# www-data in the same layer. COMPOSER_ALLOW_SUPERUSER already defaults to 1 in
+# this image.
 
 # COPY NPM DEPENDENCY FILES & INSTALL
 #
