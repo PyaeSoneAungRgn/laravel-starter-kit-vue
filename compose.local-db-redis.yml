@@ -1,0 +1,99 @@
+# Host-local database and Redis, layered on top of compose.yml.
+#
+# Use this whenever the database (MySQL or PostgreSQL) and Redis run natively
+# on the Docker host instead of in containers. Select it by adding this line
+# to the project's .env:
+#
+#   COMPOSE_FILE=compose.yml:compose.local-db-redis.yml
+#
+# Every `docker compose` command run from the project directory then picks up
+# both files automatically, so compose.yml never has to be hand-edited for
+# those hosts. (COMPOSE_FILE is resolved from the project .env; see the Docker
+# Compose predefined environment variable reference.)
+#
+# Why this shape
+# --------------
+# A database installed natively on the host and bound to 127.0.0.1 cannot be
+# reached from a container on the `laravel` bridge network:
+# host.docker.internal resolves to the bridge gateway, not to loopback. So we
+# mount the host's database sockets and let Laravel talk to them directly.
+#
+# That is deliberately better than `network_mode: host`:
+#   * network_mode: host and networks: are mutually exclusive, so it forces
+#     every service off the bridge - which kills service-name DNS used by
+#     NIGHTWATCH_INGEST_URI (nightwatch-agent:2407) and by reverb.
+#   * api and backend both run `--port=8080`. On one shared host network
+#     namespace they collide; on the bridge each has its own namespace.
+#   * ports: is ignored under host networking, so the published-port variables
+#     below would stop meaning anything.
+#
+# Socket connections appear to come from localhost, so MySQL's existing
+# 'root'@'localhost' grant keeps working. PostgreSQL still applies pg_hba.conf,
+# and peer auth sees the container's uid (www-data is not a host user), so
+# allow password auth for local connections there. Confirm the socket path
+# with:
+#   mysql -uroot -p -e "SHOW VARIABLES LIKE 'socket'"
+#   ls -ld /var/run/mysqld
+#   sudo -u postgres psql -tAc "SHOW unix_socket_directories"
+#   ls -ld /var/run/postgresql
+#
+# The application itself also has to opt in. This file only supplies the
+# connection details; set these in .env as well:
+#   DB_CONNECTION=mysql          # or pgsql
+#   CACHE_STORE=redis
+#   QUEUE_CONNECTION=redis
+#   SESSION_DRIVER=redis         # or database, to survive a Redis flush
+
+x-local-db-redis-env: &local-db-redis-env
+  # MySQL reads unix_socket from DB_SOCKET and ignores DB_HOST when it is set.
+  # The default matches Debian/Ubuntu; override DB_SOCKET in .env if the host
+  # reports a different socket.
+  #
+  # PostgreSQL has no unix_socket option in Laravel's connector, but libpq
+  # treats a DB_HOST beginning with "/" as the socket directory. Set
+  # DB_CONNECTION=pgsql, DB_HOST=/var/run/postgresql and DB_PORT=5432 in .env;
+  # DB_SOCKET below is ignored by that driver.
+  DB_SOCKET: '${DB_SOCKET:-/var/run/mysqld/mysqld.sock}'
+  # Redis runs natively on the host too. A Redis bound to 127.0.0.1 is not
+  # reachable from a bridged container over TCP - 127.0.0.1 inside the
+  # container is the container's own loopback, which is why REDIS_HOST=127.0.0.1
+  # raises "Connection refused". Point phpredis at the host's unix socket
+  # instead.
+  REDIS_HOST: '/run/redis/redis-server.sock'
+  # REDIS_PORT is not optional here. phpredis decides socket-vs-TCP from the
+  # port, so with the usual 6379 it treats the path above as a HOSTNAME and
+  # fails with "getaddrinfo for /run/redis/redis-server.sock failed: Name or
+  # service not known". Port 0 is what selects the unix socket. Note that a
+  # "unix:///path" scheme does not work either - phpredis mangles the path.
+  REDIS_PORT: '0'
+
+# Mount the directories rather than the socket files: the database and Redis
+# daemons recreate their sockets on restart, which would leave a single-file
+# bind mount pointing at a stale inode. Mounting a directory that does not
+# exist on the host only creates an empty one, so MySQL-only and
+# PostgreSQL-only hosts can share this file.
+x-local-db-redis-mounts: &local-db-redis-mounts
+  - /var/run/mysqld:/var/run/mysqld
+  - /var/run/postgresql:/var/run/postgresql
+  - /run/redis:/run/redis
+
+services:
+  api:
+    volumes: *local-db-redis-mounts
+    environment: *local-db-redis-env
+
+  backend:
+    volumes: *local-db-redis-mounts
+    environment: *local-db-redis-env
+
+  reverb:
+    volumes: *local-db-redis-mounts
+    environment: *local-db-redis-env
+
+  horizon:
+    volumes: *local-db-redis-mounts
+    environment: *local-db-redis-env
+
+  task:
+    volumes: *local-db-redis-mounts
+    environment: *local-db-redis-env
