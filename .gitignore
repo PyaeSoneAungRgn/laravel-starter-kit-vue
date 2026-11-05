@@ -28,3 +28,7 @@ frankenphp
 frankenphp-worker.php
 
 .DS_Store
+
+# Amp orb runtime state
+.amp/portals/
+.amp/in/

@@ -1,0 +1,173 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Prepares an Amp orb to build, test, and run this Laravel application.
+# Idempotent: a warm orb (restored from a snapshot) skips downloads and rebuilds.
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$repo_root"
+
+step() { printf '\n[setup] %s (t+%ss)\n' "$1" "$SECONDS"; }
+
+php_ready() {
+    command -v php >/dev/null 2>&1 || return 1
+    php -r 'exit(PHP_VERSION_ID >= 80400 ? 0 : 1);' >/dev/null 2>&1 || return 1
+    php -r '
+        foreach (["mbstring", "xml", "dom", "curl", "zip", "pdo_sqlite", "sqlite3", "intl", "bcmath", "fileinfo", "gd", "pdo_mysql", "pdo_pgsql", "redis", "pcntl", "posix", "openssl"] as $extension) {
+            if (! extension_loaded($extension)) {
+                exit(1);
+            }
+        }
+    ' >/dev/null 2>&1
+}
+
+node_ready() {
+    command -v node >/dev/null 2>&1 || return 1
+    command -v npm >/dev/null 2>&1 || return 1
+    node -e 'process.exit(Number(process.versions.node.split(".")[0]) >= 22 ? 0 : 1)' >/dev/null 2>&1
+}
+
+# --- System toolchain -------------------------------------------------------
+
+if ! php_ready; then
+    step "Installing PHP 8.4 and required extensions"
+
+    if ! grep -rqs 'packages.sury.org/php' /etc/apt/sources.list /etc/apt/sources.list.d; then
+        curl -fsSL https://packages.sury.org/php/apt.gpg |
+            sudo tee /usr/share/keyrings/sury-php.gpg >/dev/null
+        echo "deb [signed-by=/usr/share/keyrings/sury-php.gpg] https://packages.sury.org/php/ bookworm main" |
+            sudo tee /etc/apt/sources.list.d/sury-php.list >/dev/null
+    fi
+
+    sudo apt-get update -qq
+    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
+        php8.4-cli \
+        php8.4-mbstring \
+        php8.4-xml \
+        php8.4-curl \
+        php8.4-zip \
+        php8.4-sqlite3 \
+        php8.4-intl \
+        php8.4-bcmath \
+        php8.4-gd \
+        php8.4-mysql \
+        php8.4-pgsql \
+        php8.4-redis \
+        sqlite3 \
+        unzip
+
+    php_ready || {
+        echo "[setup] PHP 8.4 installation did not provide the required extensions" >&2
+        exit 1
+    }
+fi
+
+if ! command -v composer >/dev/null 2>&1; then
+    step "Installing Composer"
+    curl -fsSL https://getcomposer.org/composer-stable.phar -o /tmp/composer.phar
+    sudo install -m 0755 /tmp/composer.phar /usr/local/bin/composer
+    rm -f /tmp/composer.phar
+fi
+
+if ! node_ready; then
+    step "Installing Node.js 22"
+    curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq nodejs
+    node_ready || {
+        echo "[setup] Node.js installation did not provide Node 22 or newer" >&2
+        exit 1
+    }
+fi
+
+# --- Environment file -------------------------------------------------------
+
+step "Preparing environment file"
+[ -f .env ] || cp -- .env.example .env
+
+# --- PHP dependencies -------------------------------------------------------
+
+step "Installing PHP dependencies"
+COMPOSER_MEMORY_LIMIT=-1 composer install --no-interaction --prefer-dist --no-progress
+
+if ! grep -qE '^APP_KEY=base64:.+' .env; then
+    php artisan key:generate --ansi
+fi
+
+# --- Application database ---------------------------------------------------
+
+step "Preparing SQLite database"
+created_database=0
+if [ ! -f database/database.sqlite ]; then
+    touch database/database.sqlite
+    created_database=1
+fi
+php artisan migrate --force --ansi
+if [ "$created_database" = "1" ]; then
+    php artisan db:seed --force --ansi
+fi
+[ -L public/storage ] || php artisan storage:link --ansi >/dev/null
+
+# --- Node dependencies ------------------------------------------------------
+
+# npm has no cheap way to prove node_modules matches the lockfile, so stamp the
+# hash that produced it. The stamp lives in node_modules and travels in snapshots.
+package_lock_hash="$(sha256sum package-lock.json | cut -d' ' -f1)"
+if [ ! -d node_modules ] ||
+    [ "$(cat node_modules/.amp-package-lock 2>/dev/null || true)" != "$package_lock_hash" ]; then
+    step "Installing Node dependencies"
+    npm ci --no-audit --no-fund --prefer-offline
+    printf '%s\n' "$package_lock_hash" >node_modules/.amp-package-lock
+fi
+
+# --- Frontend assets --------------------------------------------------------
+
+step "Checking frontend assets"
+needs_build=0
+manifest=public/build/manifest.json
+if [ ! -f "$manifest" ]; then
+    needs_build=1
+else
+    frontend_paths=(resources app-modules)
+    for path in .env vite.config.ts package.json package-lock.json tsconfig.json components.json; do
+        if [ -e "$path" ]; then
+            frontend_paths+=("$path")
+        fi
+    done
+    if [ -n "$(find "${frontend_paths[@]}" -newer "$manifest" -print -quit 2>/dev/null)" ]; then
+        needs_build=1
+    fi
+fi
+if [ "$needs_build" = "1" ]; then
+    npm run build
+else
+    echo "[setup] frontend assets are up to date"
+fi
+
+# --- Orb guidance -----------------------------------------------------------
+
+# Portal links are thread-scoped, so they must not travel in a shared snapshot.
+rm -rf .amp/portals
+
+# Keep login hints and orb-specific commands where agents already look for them.
+amp_agents="$HOME/.config/amp/AGENTS.md"
+guidance_marker="# laravel-starter-kit-vue orb environment"
+if ! grep -Fqx "$guidance_marker" "$amp_agents" 2>/dev/null; then
+    mkdir -p "$(dirname "$amp_agents")"
+    cat >>"$amp_agents" <<EOF
+
+$guidance_marker
+Dependencies are preinstalled: PHP 8.4, Composer 2, Node $(node -v), and the repo's vendor/, node_modules/, and built assets.
+The SQLite database is migrated and seeded with test@example.com / password.
+Run \`amp orb services ensure\` and open the printed portal URL to view the app. The web service serves built assets, so run \`npm run build\` after changing Vue/TypeScript/CSS files.
+Run tests with \`php artisan test --compact <path>\`.
+EOF
+fi
+
+step "Verifying toolchain"
+php -v | head -1
+composer --version
+node -v
+npm -v
+php artisan --version
+
+step "Setup complete"

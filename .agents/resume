@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Runs after activation and every time an orb wakes. Only fast repairs: the
+# toolchain and dependencies were installed by .agents/setup and live in the
+# snapshot, so nothing is installed here.
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$repo_root"
+
+missing=()
+for tool in php composer node npm; do
+    command -v "$tool" >/dev/null 2>&1 || missing+=("$tool")
+done
+for directory in vendor node_modules; do
+    [ -d "$directory" ] || missing+=("$directory/")
+done
+if [ "${#missing[@]}" -gt 0 ]; then
+    echo "[resume] missing: ${missing[*]} - run .agents/setup" >&2
+fi
+
+if [ ! -f .env ]; then
+    cp -- .env.example .env
+fi
+if ! grep -qE '^APP_KEY=base64:.+' .env; then
+    php artisan key:generate --ansi >/dev/null
+fi
+
+# Restore a deleted or truncated database; a wake should not leave the app 500ing.
+if [ ! -s database/database.sqlite ]; then
+    touch database/database.sqlite
+    php artisan migrate --force --seed --ansi >/dev/null
+fi
+
+[ -L public/storage ] || php artisan storage:link --ansi >/dev/null 2>&1 || true
+
+# Supervised services stop while an orb is paused; start the declared web
+# service and its portal again so the public URL answers after a wake.
+if [ "${AMP_ORB:-}" = "1" ] && [ -f .amp/services.yaml ] && command -v amp >/dev/null 2>&1; then
+    amp orb services ensure >/dev/null 2>&1 || echo "[resume] amp orb services ensure failed" >&2
+fi
