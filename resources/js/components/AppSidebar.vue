@@ -3,23 +3,49 @@ import NavFooter from '@/components/NavFooter.vue';
 import NavMain from '@/components/NavMain.vue';
 import NavUser from '@/components/NavUser.vue';
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar';
+import { useAuthorization } from '@/composables/useAuthorization';
 import { type NavItem } from '@/types';
 import { Link } from '@inertiajs/vue3';
-import { BookOpen, Folder, LayoutGrid, Package } from 'lucide-vue-next';
+import { BookOpen, Folder, LayoutGrid, Package, ShieldCheck, Users } from 'lucide-vue-next';
+import { computed } from 'vue';
 import AppLogo from './AppLogo.vue';
 
-const mainNavItems: NavItem[] = [
+const { can, enabled } = useAuthorization();
+
+const mainNavItems = computed<NavItem[]>(() => [
     {
         title: 'Dashboard',
         href: '/dashboard',
         icon: LayoutGrid,
     },
-    {
-        title: 'Products',
-        href: '/products',
-        icon: Package,
-    },
-];
+    ...(can('view_any_product')
+        ? [
+              {
+                  title: 'Products',
+                  href: '/products',
+                  icon: Package,
+              },
+          ]
+        : []),
+    ...(enabled.value && can('view_any_user')
+        ? [
+              {
+                  title: 'Users',
+                  href: '/users',
+                  icon: Users,
+              },
+          ]
+        : []),
+    ...(enabled.value && can('view_any_role')
+        ? [
+              {
+                  title: 'Roles',
+                  href: '/roles',
+                  icon: ShieldCheck,
+              },
+          ]
+        : []),
+]);
 
 const footerNavItems: NavItem[] = [
     {

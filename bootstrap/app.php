@@ -1,5 +1,7 @@
 <?php
 
+use App\Console\Commands\CreateSuperAdminCommand;
+use App\Console\Commands\SyncPermissionsCommand;
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
 use Illuminate\Foundation\Application;
@@ -15,6 +17,10 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__ . '/../routes/console.php',
         health: '/up',
     )
+    ->withCommands([
+        CreateSuperAdminCommand::class,
+        SyncPermissionsCommand::class,
+    ])
     ->withMiddleware(function (Middleware $middleware) {
         // Amp's portal proxy runs on loopback, terminates TLS, and forwards the
         // public host and scheme. Trusting only that proxy keeps generated URLs

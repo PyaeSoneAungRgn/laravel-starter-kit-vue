@@ -14,6 +14,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { useAuthorization } from '@/composables/useAuthorization';
 import AppLayout from '@/layouts/AppLayout.vue';
 import type { BreadcrumbItem } from '@/types/index.d';
 import { Head, Link, router } from '@inertiajs/vue3';
@@ -31,6 +32,8 @@ interface Props {
 }
 
 const props = defineProps<Props>();
+
+const { can } = useAuthorization();
 
 const breadcrumbs: BreadcrumbItem[] = [{ title: 'Products', href: route('products.index') }];
 
@@ -71,7 +74,7 @@ watch(
         <div class="p-4">
             <div class="mb-4 flex items-center justify-between">
                 <h1 class="text-2xl font-bold">Products</h1>
-                <Link :href="route('products.create')">
+                <Link v-if="can('create_product')" :href="route('products.create')">
                     <Button>Create</Button>
                 </Link>
             </div>
@@ -100,10 +103,10 @@ watch(
                         <TableCell>{{ formatDate(product.created_at) }}</TableCell>
                         <TableCell class="text-right">
                             <div class="flex justify-end gap-2">
-                                <Link :href="route('products.edit', product.id)">
+                                <Link v-if="can('update_product')" :href="route('products.edit', product.id)">
                                     <Button variant="outline" size="sm">Edit</Button>
                                 </Link>
-                                <AlertDialog>
+                                <AlertDialog v-if="can('delete_product')">
                                     <AlertDialogTrigger as-child>
                                         <Button variant="destructive" size="sm">Delete</Button>
                                     </AlertDialogTrigger>

@@ -95,6 +95,10 @@ jobs:
             case "${{ inputs.service }}" in
               api|backend)
                 docker compose exec -T "${{ inputs.service }}" php artisan optimize
+                # Additive and idempotent: creates permissions for new models and
+                # refreshes the package cache. Requires `php artisan migrate` to
+                # have run once on the host after this feature ships.
+                docker compose exec -T "${{ inputs.service }}" php artisan rbac:sync --no-interaction
                 docker compose exec -T "${{ inputs.service }}" php artisan octane:reload --server=frankenphp
                 ;;
               horizon)

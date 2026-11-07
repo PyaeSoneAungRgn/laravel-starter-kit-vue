@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\User;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -42,12 +43,30 @@ class HandleInertiaRequests extends Middleware
     {
         [$message, $author] = str(Inspiring::quotes()->random())->explode('-');
 
+        $user = $request->user();
+        $rbacEnabled = (bool) config('rbac.enabled');
+        $roles = [];
+        $permissions = [];
+
+        if ($rbacEnabled && $user instanceof User) {
+            $user->loadMissing(['roles', 'permissions']);
+
+            $roles = $user->getRoleNames()->all();
+            $permissions = $user->getAllPermissions()->pluck('name')->all();
+        }
+
         return [
             ...parent::share($request),
             'name' => config('app.name'),
             'quote' => ['message' => trim((string) $message), 'author' => trim((string) $author)],
             'auth' => [
-                'user' => $request->user(),
+                'user' => $user,
+                'is_superadmin' => $user instanceof User && $user->isSuperAdmin(),
+                'roles' => $roles,
+                'permissions' => $permissions,
+            ],
+            'rbac' => [
+                'enabled' => $rbacEnabled,
             ],
             'ziggy' => [
                 ...(new Ziggy)->toArray(),

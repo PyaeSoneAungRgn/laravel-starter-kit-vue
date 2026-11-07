@@ -1,5 +1,10 @@
 <?php
 
+use App\Models\User;
+use Illuminate\Support\Str;
+use Spatie\Permission\Models\Permission;
+use Spatie\Permission\Models\Role;
+use Spatie\Permission\PermissionRegistrar;
 use Tests\TestCase;
 
 /*
@@ -42,7 +47,27 @@ expect()->extend('toBeOne', fn () => $this->toBe(1));
  |
  */
 
-function something()
+/**
+ * Assign the given permissions to the user through a freshly created role.
+ *
+ * @param  list<string>  $permissions
+ */
+function grantPermissions(User $user, array $permissions, ?string $roleName = null): Role
 {
-    // ..
+    foreach ($permissions as $permission) {
+        Permission::findOrCreate($permission, 'web');
+    }
+
+    $role = Role::findOrCreate($roleName ?? 'role-' . Str::random(8), 'web');
+    $role->syncPermissions($permissions);
+    $user->assignRole($role);
+
+    forgetPermissionCache();
+
+    return $role;
+}
+
+function forgetPermissionCache(): void
+{
+    resolve(PermissionRegistrar::class)->forgetCachedPermissions();
 }

@@ -13,7 +13,7 @@ test('guests are redirected to login on the products index', function () {
 });
 
 test('authenticated users can view the products index', function () {
-    $this->actingAs(User::factory()->create());
+    $this->actingAs(User::factory()->superadmin()->create());
 
     $this->get('/products')
         ->assertOk()
@@ -21,7 +21,7 @@ test('authenticated users can view the products index', function () {
 });
 
 test('authenticated users can visit the create page', function () {
-    $this->actingAs(User::factory()->create());
+    $this->actingAs(User::factory()->superadmin()->create());
 
     $this->get('/products/create')
         ->assertOk()
@@ -29,7 +29,7 @@ test('authenticated users can visit the create page', function () {
 });
 
 test('authenticated users can create a product', function () {
-    $this->actingAs(User::factory()->create());
+    $this->actingAs(User::factory()->superadmin()->create());
 
     $response = $this->post('/products', [
         'name' => 'Wireless Headphones',
@@ -51,14 +51,14 @@ test('authenticated users can create a product', function () {
 });
 
 test('store validates the product data', function () {
-    $this->actingAs(User::factory()->create());
+    $this->actingAs(User::factory()->superadmin()->create());
 
     $this->post('/products', [])
         ->assertSessionHasErrors(['name', 'description', 'category', 'price', 'status']);
 });
 
 test('authenticated users can visit the edit page', function () {
-    $this->actingAs(User::factory()->create());
+    $this->actingAs(User::factory()->superadmin()->create());
     $product = Product::factory()->create();
 
     $this->get("/products/{$product->id}")
@@ -67,7 +67,7 @@ test('authenticated users can visit the edit page', function () {
 });
 
 test('authenticated users can update a product', function () {
-    $this->actingAs(User::factory()->create());
+    $this->actingAs(User::factory()->superadmin()->create());
     $product = Product::factory()->create();
 
     $this->put("/products/{$product->id}", [
@@ -90,7 +90,7 @@ test('authenticated users can update a product', function () {
 });
 
 test('update validates the product data', function () {
-    $this->actingAs(User::factory()->create());
+    $this->actingAs(User::factory()->superadmin()->create());
     $product = Product::factory()->create();
 
     $this->put("/products/{$product->id}", [])
@@ -98,10 +98,47 @@ test('update validates the product data', function () {
 });
 
 test('authenticated users can delete a product', function () {
-    $this->actingAs(User::factory()->create());
+    $this->actingAs(User::factory()->superadmin()->create());
     $product = Product::factory()->create();
 
     $this->delete("/products/{$product->id}")->assertRedirect('/products');
 
     $this->assertDatabaseMissing('products', ['id' => $product->id]);
+});
+
+test('users without permissions cannot view the products index', function () {
+    $this->actingAs(User::factory()->create())
+        ->get('/products')
+        ->assertForbidden();
+});
+
+test('users with the view permission can view the products index', function () {
+    $user = User::factory()->create();
+    grantPermissions($user, ['view_any_product']);
+
+    $this->actingAs($user->refresh())
+        ->get('/products')
+        ->assertSuccessful();
+});
+
+test('users with the update permission can edit a product', function () {
+    $user = User::factory()->create();
+    grantPermissions($user, ['update_product']);
+    $product = Product::factory()->create();
+
+    $this->actingAs($user->refresh())
+        ->get("/products/{$product->id}")
+        ->assertSuccessful();
+});
+
+test('users without the delete permission cannot delete a product', function () {
+    $user = User::factory()->create();
+    grantPermissions($user, ['view_any_product']);
+    $product = Product::factory()->create();
+
+    $this->actingAs($user->refresh())
+        ->delete("/products/{$product->id}")
+        ->assertForbidden();
+
+    $this->assertModelExists($product);
 });

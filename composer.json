@@ -20,6 +20,7 @@
         "laravel/sanctum": "^4.0",
         "laravel/tinker": "^3.0",
         "modules/demo": "*",
+        "spatie/laravel-permission": "^8.0",
         "tightenco/ziggy": "^2.4"
     },
     "require-dev": {

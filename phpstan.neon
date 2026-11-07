@@ -9,6 +9,11 @@ parameters:
         - app/
         - app-modules/
 
+    # Test helper functions live in tests/Pest.php and are not autoloaded, so
+    # they must be scanned for the helpers used by module tests to resolve.
+    scanDirectories:
+        - tests/
+
     # Level 10 is the highest level
     level: 5
 

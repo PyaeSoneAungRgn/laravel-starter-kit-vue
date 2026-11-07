@@ -293,6 +293,39 @@ php artisan test app-modules/demo/tests
 
 ---
 
+### 🔐 Roles & Permissions
+
+User and role management is built on [`spatie/laravel-permission`](https://spatie.be/docs/laravel-permission/v8/introduction) and is enabled by default.
+
+**First-time setup** (also required once on existing deployments):
+
+```bash
+php artisan migrate
+php artisan rbac:sync
+php artisan rbac:superadmin --name="Admin" --email="admin@example.com"
+```
+
+`rbac:superadmin` creates a verified user (or promotes one via `--user=ID|email`) and sets `is_superadmin`. That flag bypasses every authorization check through a global `Gate::before`, so superadmins do not need any permissions or roles. It is **command-only**: the user management screens display it but can never grant or revoke it, so superadmin access always requires shell access to the server. Non-superadmins also never see superadmin accounts in the user list (including search), while superadmins see everyone.
+
+**Permissions** are generated from models, one `<ability>_<resource>` permission per policy ability — e.g. `view_any_product`, `view_product`, `create_product`, `update_product`, `delete_product`, plus `restore_*`/`force_delete_*` for soft-deletable models.
+
+```bash
+php artisan rbac:sync                  # create missing permissions (idempotent)
+php artisan rbac:sync --model=product  # limit to one model class or resource
+php artisan rbac:sync --policy         # scaffold missing App\Policies\*Policy classes first
+php artisan rbac:sync --prune --force  # delete permissions that are no longer generated
+```
+
+Models are discovered in `app/Models` and every module's `src/Models`; extra classes can be listed in `config/rbac.php`. Add a new model by creating a policy that uses `ChecksResourcePermissions` (or run `rbac:sync --policy`) and then running `rbac:sync`. Resources without a policy are skipped, so permissions always have an enforcement point.
+
+**Roles** bundle permissions and are managed at `/roles`; users are managed at `/users` and can be assigned any number of roles. Permissions are code-generated, so they are read-only in the UI and shown grouped by resource on the role form.
+
+**Feature switch.** Set `RBAC_ENABLED=false` to disable the feature: `/users` and `/roles` return 404, their navigation items disappear, and permission checks are skipped for authenticated users (non-RBAC gates such as Horizon's are unaffected). The tables stay in place, so re-enabling needs no migration.
+
+Because the app runs Octane, `config/permission.php` enables `register_octane_reset_listener`; the deploy workflow runs `rbac:sync` and reloads Octane so permission changes are not served from a stale worker.
+
+---
+
 ### 🐳 Docker & Production
 
 The container runs PHP with FrankenPHP (via `serversideup/php`) and serves the app through Laravel Octane. Frontend assets are built at image build time.
@@ -349,7 +382,7 @@ Automated workflows for continuous integration and deployment:
 - **Duster Lint** — runs `duster lint` (PHPStan) on every pull request.
 - **Duster Fix** — runs `duster fix` (Pint) and auto-commits the fixes on every pull request.
 - **OpenCode** — triggers OpenCode on `/oc` or `/opencode` comments in issues and pull requests.
-- **Deploy to DigitalOcean** — manually triggered deployment of the selected branch and service to a DigitalOcean droplet via SSH and `docker compose up`. The `mode` input selects `fast` (default: `git pull` plus a cache refresh and worker reload, no image build) or `full` (forced `docker compose up --build`). `fast` escalates to a rebuild automatically when the pushed commits changed a dependency manifest, a Docker/compose file, the `public` directory, or frontend assets.
+- **Deploy to DigitalOcean** — manually triggered deployment of the selected branch and service to a DigitalOcean droplet via SSH and `docker compose up`. The `mode` input selects `fast` (default: `git pull` plus a cache refresh and worker reload, no image build) or `full` (forced `docker compose up --build`). `fast` escalates to a rebuild automatically when the pushed commits changed a dependency manifest, a Docker/compose file, the `public` directory, or frontend assets. For `api`/`backend` it also runs `rbac:sync` after `optimize`; run `php artisan migrate` once on the host after this feature ships, since the deploy itself does not migrate.
 
 ---
 
