@@ -1,6 +1,7 @@
 {
     "agents": [
-        "opencode"
+        "opencode",
+        "amp"
     ],
     "cloud": false,
     "guidelines": true,
@@ -8,7 +9,8 @@
     "nightwatch": false,
     "packages": [
         "tightenco/duster",
-        "internachi/modular"
+        "internachi/modular",
+        "spatie/laravel-permission"
     ],
     "sail": false,
     "skills": [
@@ -22,6 +24,7 @@
         "tailwindcss-development",
         "echo-vue-development",
         "echo-development",
-        "modular"
+        "modular",
+        "laravel-permission-development"
     ]
 }
