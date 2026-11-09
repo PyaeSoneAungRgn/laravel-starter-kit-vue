@@ -7,19 +7,11 @@ on:
         description: 'Branch to deploy'
         required: true
         default: 'release/staging'
-        type: choice
-        options:
-          - release/production
-          - release/staging
+        type: string
       environment:
-        description: 'Environment'
-        type: choice
+        description: 'Environment (lists the repository environments; its secrets are used)'
+        type: environment
         required: true
-        default: 'staging'
-        options:
-          - production
-          - production-background
-          - staging
       service:
         description: 'Service'
         type: choice
@@ -50,9 +42,26 @@ jobs:
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
     steps:
+      # `branch` is free text now, so reject anything that is not a plain branch
+      # name before the value reaches the remote git commands as $BRANCH.
+      - name: Validate branch
+        env:
+          BRANCH: ${{ inputs.branch }}
+        run: |
+          case "$BRANCH" in
+            ''|*[!A-Za-z0-9._/-]*)
+              echo "::error::Invalid branch name: $BRANCH"
+              exit 1
+              ;;
+          esac
+          git check-ref-format --branch "$BRANCH" >/dev/null
+
       - name: Deploy to selected server
         uses: appleboy/ssh-action@v1.2.0
+        env:
+          BRANCH: ${{ inputs.branch }}
         with:
+          envs: BRANCH
           host: ${{ secrets.DO_HOST }}
           username: ${{ secrets.DO_USERNAME }}
           key: ${{ secrets.DO_SSH_KEY }}
@@ -68,8 +77,32 @@ jobs:
             export PUID=$(id -u)
             export PGID=$(id -g)
 
+            # Follow the selected branch instead of pulling it into whichever
+            # branch the checkout was on: `git pull origin <branch>` fast-forwards
+            # the *current* branch and keeps its name, so naming the wrong branch
+            # silently replaced that environment's code and left the deployment
+            # looking successful. --ff-only means local commits on the checkout
+            # are never discarded quietly; a diverged checkout fails the deploy.
             BEFORE=$(git rev-parse HEAD)
-            git pull origin "${{ inputs.branch }}"
+            git fetch origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH"
+            if git show-ref --verify --quiet "refs/heads/$BRANCH"; then
+              git checkout "$BRANCH"
+              git pull --ff-only origin "$BRANCH"
+            else
+              # Start from the ref fetched above: a single-branch clone has no
+              # remote-tracking ref for other branches.
+              git checkout -b "$BRANCH" --no-track "origin/$BRANCH"
+            fi
+
+            # --ff-only reports "Already up to date" when the checkout is *ahead*
+            # of the remote branch, so a server-side commit would otherwise be
+            # deployed without ever reaching origin. Refuse instead of shipping
+            # code that is not on the branch.
+            if [ "$(git rev-parse HEAD)" != "$(git rev-parse "origin/$BRANCH")" ]; then
+              echo "Deploy checkout is not at origin/$BRANCH; reset it on the server first." >&2
+              exit 1
+            fi
+
             CHANGED=$(git diff --name-only "$BEFORE" HEAD)
 
             # Application source is bind-mounted on the host, so most commits
