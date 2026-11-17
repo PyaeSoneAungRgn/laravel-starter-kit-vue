@@ -372,6 +372,26 @@ The `compose.yml` file provides the following services:
 
 The published ports are variable-driven with production-preserving defaults (`${API_PUBLISHED_PORT:-80}`, `${BACKEND_PUBLISHED_PORT:-8080}`), so production is unchanged while other environments can override them from `.env` — for example `API_PUBLISHED_PORT=127.0.0.1:8080` when a host nginx already owns port 80 and proxies to the container.
 
+#### Host-local database and Redis
+
+When MySQL/PostgreSQL and Redis run natively on the host, add `COMPOSE_FILE=compose.yml:compose.local-db-redis.yml` to `.env`. The override mounts the host's socket directories (`/run/mysqld`, `/run/postgresql`, `/run/redis`) into the containers; see the comments in `compose.local-db-redis.yml` for the required `.env` values.
+
+**Every mounted runtime directory must survive a restart.** `RuntimeDirectoryPreserve=no` is systemd's default, so stopping the service deletes `/run/redis`, `/run/mysqld` and `/run/postgresql`, and starting it creates a new directory. Running containers stay bound to the old inode and see the directory as *empty*, so Laravel fails with `SQLSTATE[HY000] [2002] No such file or directory` (or the phpredis equivalent) until the containers are restarted. Use `yes`, not `restart`: `restart` only covers `systemctl restart`, while package upgrades (including unattended-upgrades) stop and then start the service, which still deletes the directory. Prevent it with a drop-in on the host:
+
+```bash
+for svc in redis-server mysql; do
+  sudo mkdir -p /etc/systemd/system/$svc.service.d
+  printf '[Service]\nRuntimeDirectoryPreserve=yes\n' |
+    sudo tee /etc/systemd/system/$svc.service.d/preserve-runtime.conf
+done
+sudo systemctl daemon-reload
+systemctl show -p RuntimeDirectoryPreserve mysql redis-server   # both must print "yes"
+```
+
+With MariaDB the unit is `mariadb.service`, so put the drop-in under `mariadb.service.d` (`systemctl show -p Id mysql` prints the real unit name). Containers that are already bound to a stale directory need one restart after the drop-in is in place: `docker compose restart api backend reverb horizon task`. To check whether a container is stale, compare `stat -c %i /run/mysqld` on the host with `docker compose exec backend stat -c %i /run/mysqld`; different inode numbers mean the mount points to a deleted directory.
+
+For PostgreSQL, apply the same drop-in to the unit that owns the socket — `systemctl list-units 'postgresql@*'` usually shows a versioned unit such as `postgresql@16-main.service` on Debian/Ubuntu.
+
 ---
 
 ### 😺 GitHub Actions

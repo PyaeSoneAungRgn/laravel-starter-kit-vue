@@ -72,6 +72,13 @@ x-local-db-redis-env: &local-db-redis-env
 # bind mount pointing at a stale inode. Mounting a directory that does not
 # exist on the host only creates an empty one, so MySQL-only and
 # PostgreSQL-only hosts can share this file.
+#
+# The directories themselves are systemd RuntimeDirectory= entries, which
+# systemd deletes whenever the service stops (package upgrades included). The
+# containers then keep the deleted directory and MySQL reports
+# "SQLSTATE[HY000] [2002] No such file or directory". The host therefore needs
+# a RuntimeDirectoryPreserve=yes drop-in for mysql/mariadb and redis-server;
+# see the Docker & Production section of README.md.
 x-local-db-redis-mounts: &local-db-redis-mounts
   - /var/run/mysqld:/var/run/mysqld
   - /var/run/postgresql:/var/run/postgresql
